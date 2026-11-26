@@ -26,6 +26,6 @@ info.pop('UTImportedTypeDeclarations', None)
 shutil.rmtree(contents / 'PlugIns', ignore_errors=True)
 (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
 app_sources = [p for p in (root / 'App').glob('*.swift') if p.name != 'main.swift']
-subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-cache-path', str(root / '.build/module-cache'), '-I', str(root / 'Sources/CZlib'), *map(str, (root / 'Sources/HWPPreviewCore').glob('*.swift')), *map(str, app_sources), str(root / 'scripts/app-viewer-probe.swift'), '-F', str(contents / 'Frameworks'), '-framework', 'Sparkle', '-Xlinker', '-rpath', '-Xlinker', '@executable_path/../Frameworks', '-o', str(contents / 'MacOS/HWPPreview')], check=True)
+subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-cache-path', str(root / '.build/module-cache'), '-I', str(root / 'Sources/CZlib'), *map(str, (root / 'Sources/HWPPreviewCore').glob('*.swift')), *map(str, app_sources), str(root / 'scripts/app-viewer-probe.swift'), '-o', str(contents / 'MacOS/HWPPreview')], check=True)
 for mode in ['cold', 'start']:
     subprocess.run([str(contents / 'MacOS/HWPPreview'), str(root), mode], check=True, timeout=60)

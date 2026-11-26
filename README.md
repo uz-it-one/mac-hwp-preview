@@ -62,9 +62,8 @@ shasum -a 256 -c HWP-Preview-0.1.0-macOS-arm64.zip.sha256
 ### 로컬 빌드
 
 ```sh
-# 1. 의존성(Wasm 렌더링 엔진 및 Sparkle) 다운로드 및 앱 빌드
+# 1. 의존성(Wasm 렌더링 엔진) 다운로드 및 앱 빌드
 bash scripts/fetch-wasm.sh
-python3 scripts/fetch-sparkle.py
 python3 scripts/build-app.py
 python3 scripts/package-local.py
 
@@ -83,8 +82,6 @@ bash scripts/register-app.sh
 ```sh
 swift test --disable-sandbox
 python3 scripts/test_wasm_limits.py
-python3 scripts/test_release_config.py
-python3 scripts/test-update-signature.py
 
 ```
 
@@ -95,10 +92,9 @@ swift build --disable-sandbox --scratch-path .build/swift
 bash scripts/fetch-fixtures.sh
 python3 scripts/verify-local.py --system
 python3 scripts/test-preview-controller.py
-python3 scripts/test-updates.py
 
 ```
 
 ## 라이선스
 
-이 프로젝트의 자체 코드는 [MIT License](LICENSE)를 따릅니다. 내부에 사용된 RHWP, Sparkle 등 외부 라이브러리는 각각의 라이선스가 적용되며, 자세한 내용은 [ThirdParty](ThirdParty/) 폴더와 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.
+이 프로젝트의 자체 코드는 [MIT License](LICENSE)를 따릅니다. 내부에 사용된 RHWP 등 외부 라이브러리는 각각의 라이선스가 적용되며, 자세한 내용은 [ThirdParty](ThirdParty/) 폴더와 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.

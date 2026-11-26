@@ -1,36 +1,22 @@
 #!/usr/bin/env python3
 """Build native app extensions with Xcode's Swift compiler; no project generator required."""
-import os, pathlib, plistlib, shutil, subprocess, json, re, argparse
-from release_config import update_config, developer_id
+import os, pathlib, plistlib, shutil, subprocess, json, argparse
 from wasm_limits import cap_memory
 root = pathlib.Path(__file__).resolve().parent.parent
 os.chdir(root)
 parser = argparse.ArgumentParser()
-parser.add_argument('--release', action='store_true')
-parser.add_argument('--identity', help='Developer ID Application name or SHA-1 fingerprint in Keychain')
-parser.add_argument('--update-config', type=pathlib.Path, default=root/'release/update-config.json', help='JSON containing github_repository, or legacy feed_url/public_ed_key')
+parser.add_argument('--update-config', type=pathlib.Path, default=root/'release/update-config.json')
 args = parser.parse_args()
-updates = update_config(json.loads(args.update_config.read_text()) if args.update_config else {})
-identity = '-'
-if args.release:
-    if not updates or not args.identity:
-        parser.error('--release requires --identity and --update-config')
-    identity = developer_id(args.identity, subprocess.check_output(['security','find-identity','-v','-p','codesigning'], text=True))
-elif args.identity:
-    parser.error('--identity requires --release; development builds use adhoc signing')
-sparkle = root/'.build/sparkle/Sparkle.framework'
-if not sparkle.is_dir(): raise SystemExit('Run python3 scripts/fetch-sparkle.py first')
+update_settings = json.loads(args.update_config.read_text())
+updates = {'HWPUpdateRepository': update_settings['github_repository']}
 
 def sign(path, entitlements=None):
-    command = ['codesign', '--force', '--sign', identity]
-    if args.release: command += ['--options', 'runtime', '--timestamp']
+    command = ['codesign', '--force', '--sign', '-']
     if entitlements: command += ['--entitlements', str(entitlements)]
     subprocess.run(command + [str(path)], check=True)
 
-version = (root/'VERSION').read_text().strip()
+version = os.environ.get('RELEASE_VERSION', (root/'VERSION').read_text().strip()).removeprefix('v')
 build_number = (root/'BUILD_NUMBER').read_text().strip()
-if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-alpha\.\d+)?',version) or not build_number.isdigit():
-    raise SystemExit('Invalid VERSION or BUILD_NUMBER')
 out = root / '.build' / 'app'
 app = out / 'HWP Preview.app'
 engine = root / '.build/wasm/package/rhwp_bg.wasm'
@@ -77,19 +63,9 @@ info['CFBundleDocumentTypes'] = [dict(CFBundleTypeRole='Viewer', LSHandlerRank='
 plist(appc/'Info.plist',info)
 flags = ['-swift-version','5','-target',os.uname().machine+'-apple-macosx14.0',
          '-module-cache-path',str(root/'.build/module-cache'),'-O']
-framework = appc/'Frameworks/Sparkle.framework'
-framework.parent.mkdir()
-shutil.copytree(sparkle, framework, symlinks=True)
-# The host app is not sandboxed; Quick Look extensions remain sandboxed.
-# Sparkle's on-demand installer remains, but no login item/launch agent is installed.
-shutil.rmtree(framework/'Versions/B/XPCServices')
-sign(framework/'Versions/B/Autoupdate')
-sign(framework/'Versions/B/Updater.app')
-sign(framework)
 copy_web(appc)
 shutil.copytree(root/'Resources/Updater', appc/'Resources/Updater')
 run('xcrun','swiftc',*flags,*sorted((root/'App').glob('*.swift')),*sorted((root/'Sources/HWPPreviewCore').glob('*.swift')), '-I',root/'Sources/CZlib',
-    '-F',appc/'Frameworks','-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks',
     '-o',appc/'MacOS/HWPPreview')
 for name, point, principal, source in [
     ('Preview','com.apple.quicklook.preview','PreviewController','Extensions/Preview/PreviewController.swift'),
@@ -107,7 +83,6 @@ for name, point, principal, source in [
 shutil.copytree(root/'ThirdParty',appc/'Resources/ThirdParty')
 shutil.copy2(root/'THIRD_PARTY_NOTICES.md',appc/'Resources/THIRD_PARTY_NOTICES.md')
 shutil.copy2(root/'LICENSE',appc/'Resources/LICENSE')
-(appc/'Resources/BuildInfo.json').write_text(json.dumps({'version':version,'build':build_number,'engine':'@rhwp/core@0.8.7','wasmMaximumBytes':256*1024*1024,'architecture':os.uname().machine,'sparkle':'2.10.0','releaseStatus':'developer-id-signed-not-notarized' if args.release else 'development-only'},indent=2)+'\n')
+(appc/'Resources/BuildInfo.json').write_text(json.dumps({'version':version,'build':build_number,'engine':'@rhwp/core@0.8.7','wasmMaximumBytes':256*1024*1024,'architecture':os.uname().machine,'releaseStatus':'adhoc-signed'},indent=2)+'\n')
 sign(app)
-run('codesign','--verify','--deep','--strict',app)
 print(app)

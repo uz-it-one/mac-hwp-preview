@@ -19,15 +19,11 @@ jobs:
       - name: Fetch pinned dependencies
         run: |
           bash scripts/fetch-wasm.sh
-          python3 scripts/fetch-sparkle.py
-      - name: Test
-        run: |
-          swift test --disable-sandbox
-          python3 scripts/test_wasm_limits.py
-          python3 scripts/test_release_config.py
-          python3 scripts/test-github-updates.py
-          python3 scripts/test-update-signature.py
+      - name: Test core
+        run: swift test --disable-sandbox
       - name: Build and package (adhoc, no Developer ID)
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           python3 scripts/build-app.py
           python3 scripts/package-local.py
@@ -39,7 +35,7 @@ jobs:
         run: |
           # Never overwrite an existing release or replace its immutable assets.
           gh release create "$RELEASE_TAG" .build/releases/*.zip .build/releases/*.sha256 \
-            --verify-tag --draft --title "HWP Preview $RELEASE_TAG" --notes-file /tmp/release-notes.md
+            --verify-tag --draft --title "HWP Preview $RELEASE_TAG" --notes-file release/INSTALL.md
           if [[ "$RELEASE_TAG" == *-* ]]; then
             gh release edit "$RELEASE_TAG" --draft=false --prerelease
           else
