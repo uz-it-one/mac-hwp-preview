@@ -1,3 +1,4 @@
+import './document-tools.js';
 import { safeSVG, verifyImages } from './svg.js';
 let worker;
 let rejectRendering;

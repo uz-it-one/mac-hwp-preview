@@ -12,7 +12,7 @@ public final class AssetHandler: NSObject, WKURLSchemeHandler {
     private let directory: URL
     public init(directory: URL) { self.directory = directory }
     public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
-        let names = ["index.html":"text/html", "viewer.js":"text/javascript", "svg.js":"text/javascript", "engine-worker.js":"text/javascript", "rhwp.js":"text/javascript", "rhwp_bg.wasm":"application/wasm"]
+        let names = ["index.html":"text/html", "document-tools.js":"text/javascript", "viewer.js":"text/javascript", "svg.js":"text/javascript", "engine-worker.js":"text/javascript", "rhwp.js":"text/javascript", "rhwp_bg.wasm":"application/wasm"]
         guard let url = urlSchemeTask.request.url, url.host == "assets",
               let mime = names[String(url.path.dropFirst())] else {
             urlSchemeTask.didFailWithError(PreviewFailure.invalid); return
@@ -27,8 +27,30 @@ public final class AssetHandler: NSObject, WKURLSchemeHandler {
     public func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 }
 
+/// File drops are opt-in for the host viewer; extensions keep WebKit's default behavior.
+public final class PreviewWebView: WKWebView {
+    public var openFiles: (([URL]) -> Void)?
+    private func droppedFiles(_ sender: NSDraggingInfo) -> [URL] {
+        sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+    public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard openFiles != nil else { return super.draggingEntered(sender) }
+        return droppedFiles(sender).isEmpty ? [] : .copy
+    }
+    public override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard openFiles != nil else { return super.draggingUpdated(sender) }
+        return draggingEntered(sender)
+    }
+    public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let openFiles else { return super.performDragOperation(sender) }
+        let urls = droppedFiles(sender); guard !urls.isEmpty else { return false }
+        openFiles(urls); return true
+    }
+}
+
 public final class WebRenderer: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
-    public let webView: WKWebView
+    public let webView: PreviewWebView
+    public var runtimeFailure: ((Error) -> Void)?
     private var completion: ((Result<[String: Any], Error>) -> Void)?
     private var input: Data?
     private var thumbnail = false
@@ -42,7 +64,7 @@ public final class WebRenderer: NSObject, WKScriptMessageHandler, WKNavigationDe
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.setURLSchemeHandler(AssetHandler(directory: assets), forURLScheme: "hwp-preview")
-        webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1100), configuration: configuration)
+        webView = PreviewWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1100), configuration: configuration)
         super.init()
         webView.navigationDelegate = self
         let handler = WeakMessageHandler(); handler.target = self
@@ -103,8 +125,11 @@ public final class WebRenderer: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.stopLoading()
     }
     public func cancel() { cancellation.cancel(); generation = UUID().uuidString; stopEngine(); finish(.failure(PreviewFailure.cancelled)) }
-    public func dispose() { cancel(); webView.configuration.userContentController.removeScriptMessageHandler(forName: "ready"); webView.configuration.userContentController.removeScriptMessageHandler(forName: "imageBudget") }
-    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { finish(.failure(PreviewFailure.engineFailed)) }
+    public func dispose() { runtimeFailure = nil; cancel(); webView.configuration.userContentController.removeScriptMessageHandler(forName: "ready"); webView.configuration.userContentController.removeScriptMessageHandler(forName: "imageBudget") }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if completion != nil { finish(.failure(PreviewFailure.engineFailed)) }
+        else { runtimeFailure?(PreviewFailure.engineFailed) }
+    }
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(.failure(PreviewFailure.engineFailed)) }
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(.failure(PreviewFailure.engineFailed)) }
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

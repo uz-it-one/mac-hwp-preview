@@ -44,6 +44,13 @@ def plist(path, value):
 
 def run(*args): subprocess.run([str(x) for x in args], check=True)
 
+def copy_web(contents):
+    web = contents/'Resources/Web'
+    shutil.copytree(root/'Resources/Web', web)
+    for filename in ['rhwp.js','rhwp_bg.wasm','LICENSE']:
+        shutil.copy2(root/'.build/wasm/package'/filename, web/filename)
+    (web/'rhwp_bg.wasm').write_bytes(cap_memory((web/'rhwp_bg.wasm').read_bytes()))
+
 def bundle(path, name, ident, extension=None):
     contents = path / 'Contents'
     (contents / 'MacOS').mkdir(parents=True)
@@ -60,6 +67,8 @@ types = ['org.hwp-preview.hwp', 'org.hwp-preview.hwpx', 'com.hancom.hwp', 'com.h
 appc = bundle(app, 'HWPPreview', 'org.hwp-preview.app')
 info = plistlib.loads((appc/'Info.plist').read_bytes())
 info['NSPrincipalClass'] = 'NSApplication'
+info['CFBundleIconFile'] = 'AppIcon.icns'
+shutil.copy2(root/'Resources/AppIcon.icns', appc/'Resources/AppIcon.icns')
 info.update(updates)
 info['UTImportedTypeDeclarations'] = [dict(UTTypeIdentifier=types[i], UTTypeDescription=ext.upper()+' Document',
     UTTypeConformsTo=['public.data'], UTTypeTagSpecification={'public.filename-extension':[ext],
@@ -77,7 +86,8 @@ shutil.rmtree(framework/'Versions/B/XPCServices')
 sign(framework/'Versions/B/Autoupdate')
 sign(framework/'Versions/B/Updater.app')
 sign(framework)
-run('xcrun','swiftc',*flags,*sorted((root/'App').glob('*.swift')),
+copy_web(appc)
+run('xcrun','swiftc',*flags,*sorted((root/'App').glob('*.swift')),*sorted((root/'Sources/HWPPreviewCore').glob('*.swift')), '-I',root/'Sources/CZlib',
     '-F',appc/'Frameworks','-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks',
     '-o',appc/'MacOS/HWPPreview')
 for name, point, principal, source in [
@@ -89,11 +99,7 @@ for name, point, principal, source in [
                dict(NSExtensionPointIdentifier=point,NSExtensionPrincipalClass=principal,NSExtensionAttributes=attrs))
     run('xcrun','swiftc',*flags,'-parse-as-library','-application-extension',*sorted((root/'Sources/HWPPreviewCore').glob('*.swift')),source,'-I',root/'Sources/CZlib',
         '-Xlinker','-e','-Xlinker','_NSExtensionMain','-o',c/'MacOS'/name)
-    web = c/'Resources/Web'
-    shutil.copytree(root/'Resources/Web',web)
-    for filename in ['rhwp.js','rhwp_bg.wasm','LICENSE']:
-        shutil.copy2(root/'.build/wasm/package'/filename,web/filename)
-    (web/'rhwp_bg.wasm').write_bytes(cap_memory((web/'rhwp_bg.wasm').read_bytes()))
+    copy_web(c)
     ent = out/'extension.entitlements'
     plist(ent,{'com.apple.security.app-sandbox':True,'com.apple.security.files.user-selected.read-only':True,'com.apple.security.network.client':True})
     sign(c.parent, ent)

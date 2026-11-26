@@ -1,12 +1,78 @@
-.build/
-.swiftpm/
-.DS_Store
-__pycache__/
-*.pyc
+# Build products, downloaded engines/dependencies, local corpus and verification output
+/.build/
+/.swiftpm/
+/build/
+/dist/
+/DerivedData/
+/ModuleCache.noindex/
 
-.vscode/
+# macOS application packages and Xcode-generated results
+*.app/
+*.appex/
+*.dSYM/
+*.xcarchive/
+*.xcresult/
+xcuserdata/
+*.xcuserstate
+
+# Release archives outside the standard .build output directory
+/*.zip
+/*.zip.sha256
+/*.dmg
+/*.pkg
+/release/*.zip
+/release/*.zip.sha256
+/release/*.dmg
+/release/*.pkg
+
+# Python tooling and local caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local editor and agent settings
+/.codex/
+/.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+
+# macOS filesystem metadata
+.DS_Store
+._*
+.Spotlight-V100/
+.Trashes/
+
+# Local scratch files and logs
+/tmp/
+/temp/
+/logs/
+*.log
+*.tmp
+
+# Local environment values and signing credentials (keep shareable templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
 *.p12
 *.p8
 *.key
-.env
-.env.*
+*.keychain
+*.keychain-db
+*.mobileprovision
+*.provisionprofile
+
+# Deliberately keep Resources (including AppIcon.icns and source.png), test fixtures,
+# Package.resolved, release configuration/appcast, documentation and license files.
+# Do not globally ignore image, PDF, HWP/HWPX, JSON or archive formats used as inputs.
