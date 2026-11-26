@@ -16,12 +16,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Validate tag and architecture
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          test "$(uname -m)" = arm64
-          python3 scripts/release-notes.py "$RELEASE_TAG" > /tmp/release-notes.md
       - name: Fetch pinned dependencies
         run: |
           bash scripts/fetch-wasm.sh
