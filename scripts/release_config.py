@@ -12,6 +12,10 @@ def https_url(value):
 
 def update_config(config):
     if not config: return {}
+    if "github_repository" in config:
+        if config != {"github_repository": "uz-it-one/mac-hwp-preview"}:
+            raise ValueError("Unsupported GitHub update repository or mixed update configuration")
+        return {"HWPUpdateRepository": config["github_repository"]}
     https_url(config['feed_url'])
     key = base64.b64decode(config['public_ed_key'], validate=True)
     if len(key) != 32: raise ValueError('Ed25519 public key must contain 32 bytes')

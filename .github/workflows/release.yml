@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Validate tag and architecture
@@ -31,6 +31,7 @@ jobs:
           swift test --disable-sandbox
           python3 scripts/test_wasm_limits.py
           python3 scripts/test_release_config.py
+          python3 scripts/test-github-updates.py
           python3 scripts/test-update-signature.py
       - name: Build and package (adhoc, no Developer ID)
         run: |

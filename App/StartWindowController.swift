@@ -35,6 +35,7 @@ import AppKit
     updates.bind(button: update)
     let updateStatus = NSTextField(wrappingLabelWithString: updates.status)
     updateStatus.textColor = .secondaryLabelColor
+    updates.bind(statusLabel: updateStatus)
     let stack = NSStackView(views: [
       intro, openButton, settings, path, defaultStatus, defaultRow, result, update, updateStatus,
     ])

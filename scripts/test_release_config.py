@@ -6,6 +6,11 @@ class ReleaseConfigTests(unittest.TestCase):
         c = update_config({'feed_url':'https://updates.hwp-preview.org/appcast.xml','public_ed_key':'m2FtgM4lOJUKfyZeRQiNxKEMxEIWsoXmVMst1WjXwUg='})
         self.assertTrue(c['SUVerifyUpdateBeforeExtraction'])
         self.assertFalse(c['SUAutomaticallyUpdate'])
+    def test_github_release_repository(self):
+        config = {'github_repository':'uz-it-one/mac-hwp-preview'}
+        self.assertEqual(update_config(config), {'HWPUpdateRepository':'uz-it-one/mac-hwp-preview'})
+        for invalid in [{'github_repository':'other/repo'}, {**config, 'feed_url':'https://updates.hwp-preview.org/feed'}]:
+            with self.assertRaises(ValueError): update_config(invalid)
     def test_invalid_feed(self):
         for url in ['http://example.org/feed','file:///tmp/feed','https://user:secret@host/feed','https://example.com/feed','https://localhost/feed']:
             with self.subTest(url=url), self.assertRaises(ValueError):

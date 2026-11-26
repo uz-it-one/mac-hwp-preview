@@ -8,7 +8,7 @@ os.chdir(root)
 parser = argparse.ArgumentParser()
 parser.add_argument('--release', action='store_true')
 parser.add_argument('--identity', help='Developer ID Application name or SHA-1 fingerprint in Keychain')
-parser.add_argument('--update-config', type=pathlib.Path, default=root/'release/update-config.json', help='JSON containing feed_url and public_ed_key (public values only)')
+parser.add_argument('--update-config', type=pathlib.Path, default=root/'release/update-config.json', help='JSON containing github_repository, or legacy feed_url/public_ed_key')
 args = parser.parse_args()
 updates = update_config(json.loads(args.update_config.read_text()) if args.update_config else {})
 identity = '-'
@@ -87,6 +87,7 @@ sign(framework/'Versions/B/Autoupdate')
 sign(framework/'Versions/B/Updater.app')
 sign(framework)
 copy_web(appc)
+shutil.copytree(root/'Resources/Updater', appc/'Resources/Updater')
 run('xcrun','swiftc',*flags,*sorted((root/'App').glob('*.swift')),*sorted((root/'Sources/HWPPreviewCore').glob('*.swift')), '-I',root/'Sources/CZlib',
     '-F',appc/'Frameworks','-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks',
     '-o',appc/'MacOS/HWPPreview')
