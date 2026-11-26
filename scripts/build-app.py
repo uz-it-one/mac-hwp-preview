@@ -32,7 +32,9 @@ def run(*args): subprocess.run([str(x) for x in args], check=True)
 
 def copy_web(contents):
     web = contents/'Resources/Web'
-    shutil.copytree(root/'Resources/Web', web)
+    web.mkdir(parents=True)
+    for filename in ['index.html', 'viewer.js', 'document-tools.js', 'svg.js', 'engine-worker.js']:
+        shutil.copy2(root/'Resources/Web'/filename, web/filename)
     for filename in ['rhwp.js','rhwp_bg.wasm','LICENSE']:
         shutil.copy2(root/'.build/wasm/package'/filename, web/filename)
     (web/'rhwp_bg.wasm').write_bytes(cap_memory((web/'rhwp_bg.wasm').read_bytes()))
@@ -64,7 +66,8 @@ plist(appc/'Info.plist',info)
 flags = ['-swift-version','5','-target',os.uname().machine+'-apple-macosx14.0',
          '-module-cache-path',str(root/'.build/module-cache'),'-O']
 copy_web(appc)
-shutil.copytree(root/'Resources/Updater', appc/'Resources/Updater')
+(appc/'Resources/Updater').mkdir()
+shutil.copy2(root/'Resources/Updater/install-update.sh', appc/'Resources/Updater/install-update.sh')
 run('xcrun','swiftc',*flags,*sorted((root/'App').glob('*.swift')),*sorted((root/'Sources/HWPPreviewCore').glob('*.swift')), '-I',root/'Sources/CZlib',
     '-o',appc/'MacOS/HWPPreview')
 for name, point, principal, source in [
@@ -80,8 +83,8 @@ for name, point, principal, source in [
     ent = out/'extension.entitlements'
     plist(ent,{'com.apple.security.app-sandbox':True,'com.apple.security.files.user-selected.read-only':True,'com.apple.security.network.client':True})
     sign(c.parent, ent)
-shutil.copytree(root/'ThirdParty',appc/'Resources/ThirdParty')
-shutil.copy2(root/'THIRD_PARTY_NOTICES.md',appc/'Resources/THIRD_PARTY_NOTICES.md')
+(appc/'Resources/ThirdParty').mkdir()
+shutil.copy2(root/'ThirdParty/RHWP-LICENSE.txt', appc/'Resources/ThirdParty/RHWP-LICENSE.txt')
 shutil.copy2(root/'LICENSE',appc/'Resources/LICENSE')
 (appc/'Resources/BuildInfo.json').write_text(json.dumps({'version':version,'build':build_number,'engine':'@rhwp/core@0.8.7','wasmMaximumBytes':256*1024*1024,'architecture':os.uname().machine,'releaseStatus':'adhoc-signed'},indent=2)+'\n')
 sign(app)
