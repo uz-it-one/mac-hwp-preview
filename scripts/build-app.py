@@ -29,7 +29,7 @@ def sign(path, entitlements=None):
 
 version = (root/'VERSION').read_text().strip()
 build_number = (root/'BUILD_NUMBER').read_text().strip()
-if not re.fullmatch(r'\v\d+\.\d+\.\d+(?:-alpha\.\d+)?',version) or not build_number.isdigit():
+if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-alpha\.\d+)?',version) or not build_number.isdigit():
     raise SystemExit('Invalid VERSION or BUILD_NUMBER')
 out = root / '.build' / 'app'
 app = out / 'HWP Preview.app'
