@@ -11,16 +11,19 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
 public final class AssetHandler: NSObject, WKURLSchemeHandler {
     private let directory: URL
     public init(directory: URL) { self.directory = directory }
+    private static let mimeTypes = ["index.html":"text/html", "document-tools.js":"text/javascript", "viewer.js":"text/javascript", "svg.js":"text/javascript", "engine-worker.js":"text/javascript", "rhwp.js":"text/javascript", "rhwp_bg.wasm":"application/wasm"]
+    private static let policy = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'"
     public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
-        let names = ["index.html":"text/html", "document-tools.js":"text/javascript", "viewer.js":"text/javascript", "svg.js":"text/javascript", "engine-worker.js":"text/javascript", "rhwp.js":"text/javascript", "rhwp_bg.wasm":"application/wasm"]
-        guard let url = urlSchemeTask.request.url, url.host == "assets",
-              let mime = names[String(url.path.dropFirst())] else {
+        guard let url = urlSchemeTask.request.url, url.host == "assets" else {
+            urlSchemeTask.didFailWithError(PreviewFailure.invalid); return
+        }
+        let name = String(url.path.dropFirst())
+        guard let mime = Self.mimeTypes[name] else {
             urlSchemeTask.didFailWithError(PreviewFailure.invalid); return
         }
         do {
-            let data = try Data(contentsOf: directory.appendingPathComponent(String(url.path.dropFirst())))
-            let policy = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'"
-            urlSchemeTask.didReceive(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": mime, "Content-Length": String(data.count), "Content-Security-Policy":policy])!)
+            let data = try Data(contentsOf: directory.appendingPathComponent(name))
+            urlSchemeTask.didReceive(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": mime, "Content-Length": String(data.count), "Content-Security-Policy":Self.policy])!)
             urlSchemeTask.didReceive(data); urlSchemeTask.didFinish()
         } catch { urlSchemeTask.didFailWithError(error) }
     }
@@ -125,7 +128,13 @@ public final class WebRenderer: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.stopLoading()
     }
     public func cancel() { cancellation.cancel(); generation = UUID().uuidString; stopEngine(); finish(.failure(PreviewFailure.cancelled)) }
-    public func dispose() { runtimeFailure = nil; cancel(); webView.configuration.userContentController.removeScriptMessageHandler(forName: "ready"); webView.configuration.userContentController.removeScriptMessageHandler(forName: "imageBudget") }
+    public func dispose() {
+        runtimeFailure = nil
+        cancel()
+        let controller = webView.configuration.userContentController
+        controller.removeScriptMessageHandler(forName: "ready")
+        controller.removeScriptMessageHandler(forName: "imageBudget")
+    }
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         if completion != nil { finish(.failure(PreviewFailure.engineFailed)) }
         else { runtimeFailure?(PreviewFailure.engineFailed) }

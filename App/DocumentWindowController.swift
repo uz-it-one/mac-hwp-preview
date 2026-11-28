@@ -183,10 +183,7 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
     generation += 1
     let request = generation
     pendingScript?.cancel()
-    renderer?.webView.configuration.userContentController.removeScriptMessageHandler(
-      forName: "viewerState")
-    renderer?.dispose()
-    renderer?.webView.removeFromSuperview()
+    disposeRenderer()
     ready = false
     retry.isHidden = true
     status.stringValue = "문서를 읽는 중…"
@@ -226,6 +223,12 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
       }
     }
   }
+  private func disposeRenderer() {
+    renderer?.webView.configuration.userContentController.removeScriptMessageHandler(
+      forName: "viewerState")
+    renderer?.dispose()
+    renderer?.webView.removeFromSuperview()
+  }
   private func fail(_ error: Error) {
     guard !isClosed else { return }
     ready = false
@@ -240,14 +243,15 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
     scale = data["scale"] as? Double ?? scale
     if window?.firstResponder !== page.currentEditor() { page.stringValue = String(current) }
     total.stringValue = "/ \(pageCount)쪽"
+    results.stringValue = searchSummary(data)
+  }
+  private func searchSummary(_ data: [String: Any]) -> String {
+    if search.stringValue.isEmpty { return "" }
     let count = data["matches"] as? Int ?? 0
+    if count == 0 { return "결과 없음" }
     let selected = data["selected"] as? Int ?? 0
-    results.stringValue =
-      search.stringValue.isEmpty
-      ? ""
-      : (count == 0
-        ? "결과 없음"
-        : "\(selected) / \(count)" + ((data["limited"] as? Bool == true) ? " (최대 표시)" : ""))
+    let limited = data["limited"] as? Bool == true ? " (최대 표시)" : ""
+    return "\(selected) / \(count)\(limited)"
   }
   private func script(_ code: String, arguments: [String: Any] = [:]) {
     guard ready, let web = renderer?.webView else { return }
@@ -281,11 +285,10 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
     }
     navigate(n)
   }
-  @objc func zoomIn() {
-    script("return window.documentTools.zoom(value)", arguments: ["value": scale + 0.25])
-  }
-  @objc func zoomOut() {
-    script("return window.documentTools.zoom(value)", arguments: ["value": scale - 0.25])
+  @objc func zoomIn() { zoom(to: scale + 0.25) }
+  @objc func zoomOut() { zoom(to: scale - 0.25) }
+  private func zoom(to value: Double) {
+    script("return window.documentTools.zoom(value)", arguments: ["value": value])
   }
   @objc func fitWidth() { script("return window.documentTools.zoom(1)") }
   @objc func toggleSearch() {
@@ -337,14 +340,15 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
       arguments: ["query": search.stringValue, "direction": direction])
   }
   func controlTextDidChange(_ obj: Notification) {
-    if search.stringValue.isEmpty {
-      script("window.documentTools.clearSearch();return window.documentTools.state()")
-    }
+    if search.stringValue.isEmpty { clearSearch() }
+  }
+  private func clearSearch() {
+    script("window.documentTools.clearSearch();return window.documentTools.state()")
   }
   override func cancelOperation(_ sender: Any?) {
     findRow.isHidden = true
     search.stringValue = ""
-    script("window.documentTools.clearSearch();return window.documentTools.state()")
+    clearSearch()
     window?.makeFirstResponder(renderer?.webView)
   }
   @objc func retryLoad() { onRetry?() }
@@ -407,10 +411,7 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSSe
     generation += 1
     pendingScript?.cancel()
     cancelExport()
-    renderer?.webView.configuration.userContentController.removeScriptMessageHandler(
-      forName: "viewerState")
-    renderer?.dispose()
-    renderer?.webView.removeFromSuperview()
+    disposeRenderer()
     renderer = nil
     onClose?()
     onClose = nil

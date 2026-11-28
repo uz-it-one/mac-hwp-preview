@@ -25,12 +25,10 @@ import AppKit
     let path = NSTextField(wrappingLabelWithString: Self.settingsPath)
     path.textColor = .secondaryLabelColor
     let defaultRow = NSStackView()
-    for (index, title) in ["HWP 기본 앱으로 지정"].enumerated() {
-      let button = NSButton(title: title, target: self, action: #selector(setDefault(_:)))
-      button.tag = index
-      settingButtons.append(button)
-      defaultRow.addArrangedSubview(button)
-    }
+    let defaultButton = NSButton(
+      title: "HWP 기본 앱으로 지정", target: self, action: #selector(setDefault))
+    settingButtons.append(defaultButton)
+    defaultRow.addArrangedSubview(defaultButton)
     let update = NSButton(title: "업데이트 확인…", target: nil, action: nil)
     updates.bind(button: update)
     let updateStatus = NSTextField(wrappingLabelWithString: updates.status)
@@ -42,12 +40,13 @@ import AppKit
     stack.orientation = .vertical
     stack.alignment = .leading
     stack.spacing = 12
-    window.contentView!.addSubview(stack)
+    let content = window.contentView!
+    content.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24),
-      stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24),
-      stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24),
+      stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
+      stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+      stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
     ])
     intro.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     result.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -62,10 +61,10 @@ import AppKit
     settingButtons.forEach { $0.isEnabled = defaults.isInstalled }
   }
   @objc private func openDocument() { open() }
-  @objc private func setDefault(_ sender: NSButton) {
+  @objc private func setDefault() {
     settingButtons.forEach { $0.isEnabled = false }
     result.stringValue = "기본 앱을 변경하는 중…"
-    defaults.set(sender.tag == 2 ? ["hwp", "hwpx"] : [sender.tag == 0 ? "hwp" : "hwpx"]) {
+    defaults.set(["hwp"]) {
       [weak self] results in
       self?.refreshDefaults()
       self?.result.stringValue = results.keys.sorted().map { "\($0.uppercased()): \(results[$0]!)" }

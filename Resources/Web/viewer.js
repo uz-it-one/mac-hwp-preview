@@ -1,5 +1,5 @@
 import './document-tools.js';
-import { safeSVG, verifyImages } from './svg.js';
+import { safeSVG, svgSize, verifyImages } from './svg.js';
 let worker;
 let rejectRendering;
 window.cancelRendering = () => { worker?.terminate(); worker = undefined; rejectRendering?.(new Error('cancelled')); rejectRendering = undefined; };
@@ -32,11 +32,9 @@ window.renderDocument = async (base64, thumbnail) => {
     });
     const imageFailures = await verifyImages(pages);
     await new Promise(resolve => setTimeout(resolve, 0));
-    const svg = pages.querySelector('svg');
-    const box = svg.viewBox.baseVal;
+    const {width, height} = svgSize(pages.querySelector('svg'));
     return {pages: count, rendered: target, textCharacters: pages.textContent.length,
-            images, imageFailures, sanitizedElements:removed, engineWarnings, width: box.width || svg.width.baseVal.value,
-            height: box.height || svg.height.baseVal.value, fidelityVerified: false};
+            images, imageFailures, sanitizedElements:removed, engineWarnings, width, height, fidelityVerified: false};
 };
 const request = new URL(location.href).searchParams.get('request');
 window.webkit?.messageHandlers.ready.postMessage({request,ready:true});

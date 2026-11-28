@@ -60,13 +60,14 @@ public final class Renderer {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         let magic = try handle.read(upToCount: 8) ?? Data()
-        let cfb = Data([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
-        if url.pathExtension.lowercased() == "hwp" {
-            guard magic == cfb else { throw PreviewFailure.invalid }
-        } else {
-            guard magic.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]) else { throw PreviewFailure.invalid }
-        }
+        guard magic.starts(with: signature(for: url)) else { throw PreviewFailure.invalid }
     }
+
+    /// HWP 5.x is a CFB container; HWPX is a ZIP container.
+    static func signature(for url: URL) -> [UInt8] {
+        url.pathExtension.lowercased() == "hwp" ? cfbSignature : [0x50, 0x4B, 0x03, 0x04]
+    }
+    static let cfbSignature: [UInt8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]
 
     /// Read once with a hard byte cap, then validate the bytes actually passed to the engine.
     public static func snapshot(_ url: URL, maximumBytes: Int) throws -> Data {
@@ -76,9 +77,7 @@ public final class Renderer {
         let data = try handle.read(upToCount: maximumBytes + 1) ?? Data()
         guard data.count <= maximumBytes else { throw PreviewFailure.oversized }
         guard data.count > 8 else { throw PreviewFailure.invalid }
-        let signature: [UInt8] = url.pathExtension.lowercased() == "hwp"
-            ? [0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1] : [0x50,0x4B,0x03,0x04]
-        guard data.starts(with: signature) else { throw PreviewFailure.invalid }
+        guard data.starts(with: signature(for: url)) else { throw PreviewFailure.invalid }
         return data
     }
 
@@ -112,10 +111,7 @@ public final class Renderer {
         try task.run()
         while task.isRunning {
             let size = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            let failure: PreviewFailure? = cancellation.isCancelled ? .cancelled :
-                (Date().timeIntervalSince(started) > limits.seconds ? .timeout :
-                 (size > limits.outputBytes ? .oversized : nil))
-            if let failure {
+            if let failure = runningFailure(cancellation: cancellation, started: started, outputSize: size) {
                 task.terminate()
                 let until = Date().addingTimeInterval(0.25)
                 while task.isRunning && Date() < until { Thread.sleep(forTimeInterval: 0.01) }
@@ -136,5 +132,12 @@ public final class Renderer {
         guard let document = PDFDocument(data: data), document.pageCount > 0 else { throw PreviewFailure.invalidPDF }
         guard document.pageCount <= limits.pages else { throw PreviewFailure.oversized }
         return RenderResult(pdf: data, pageCount: document.pageCount, elapsed: Date().timeIntervalSince(started))
+    }
+
+    private func runningFailure(cancellation: Cancellation, started: Date, outputSize: Int) -> PreviewFailure? {
+        if cancellation.isCancelled { return .cancelled }
+        if Date().timeIntervalSince(started) > limits.seconds { return .timeout }
+        if outputSize > limits.outputBytes { return .oversized }
+        return nil
     }
 }
