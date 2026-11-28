@@ -1,8 +1,16 @@
 // Opt-in host viewer tools. Quick Look never enables these listeners or overlays.
+import { svgSize } from './svg.js';
 let enabled = false, scale = 1, matches = [], selected = -1, query = '';
 let pinchAnchor = null;
 const pages = () => [...document.querySelectorAll('#pages > .page')];
 const normal = value => value.normalize('NFD').toLocaleLowerCase('ko');
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+function matchRange(match) {
+    const range = document.createRange();
+    range.setStart(match.start.node, match.start.offset);
+    range.setEnd(match.end.node, match.end.end);
+    return range;
+}
 function state() {
     const list = pages();
     const current = Math.max(0, list.findIndex(p => p.getBoundingClientRect().bottom > 32));
@@ -10,17 +18,15 @@ function state() {
         limited: matches.length === 10000 };
 }
 function report() { if (enabled) window.webkit?.messageHandlers.viewerState?.postMessage(state()); }
+function refresh() { highlight(); report(); return state(); }
 function highlight() {
     document.getElementById('viewer-highlight')?.remove();
     if (selected < 0 || !matches[selected]) return;
     const match = matches[selected];
     const overlay = document.createElement('div'); overlay.id = 'viewer-highlight';
     overlay.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:1';
-    const range = document.createRange();
     try {
-        range.setStart(match.start.node, match.start.offset);
-        range.setEnd(match.end.node, match.end.end);
-        for (const rect of range.getClientRects()) {
+        for (const rect of matchRange(match).getClientRects()) {
             const box = document.createElement('div');
             box.style.cssText = `position:absolute;background:rgba(255,190,0,.35);outline:1px solid #ad7300;left:${rect.left+scrollX}px;top:${rect.top+scrollY}px;width:${rect.width}px;height:${rect.height}px`;
             overlay.append(box);
@@ -39,9 +45,9 @@ export function enable() {
 export function zoom(value) {
     if (!Number.isFinite(value)) throw new Error('invalidZoom');
     pinchAnchor = null;
-    scale = Math.max(.5, Math.min(3,value));
+    scale = clamp(value, .5, 3);
     document.getElementById('pages').style.width = `${scale*100}%`;
-    highlight(); report(); return state();
+    return refresh();
 }
 export function go(page) {
     const list=pages(); if (!Number.isInteger(page) || page<1 || page>list.length) throw new Error('invalidPage');
@@ -50,12 +56,12 @@ export function go(page) {
 export function step(direction) {
     const count=pages().length;
     if(!count)return state();
-    return go(Math.max(1,Math.min(count,state().page+(direction<0?-1:1))));
+    return go(clamp(state().page+(direction<0?-1:1), 1, count));
 }
 export function zoomBy(delta, anchorX=.5, anchorY=.5) {
     if(![delta,anchorX,anchorY].every(Number.isFinite))throw new Error('invalidZoom');
-    const x=Math.max(0,Math.min(1,anchorX))*innerWidth;
-    const y=Math.max(0,Math.min(1,anchorY))*innerHeight;
+    const x=clamp(anchorX,0,1)*innerWidth;
+    const y=clamp(anchorY,0,1)*innerHeight;
     const list=pages();
     // Anchor to an individual page: inter-page gaps and outer padding do not scale.
     const page=list.find(p=>p.getBoundingClientRect().bottom>=y) || list.at(-1);
@@ -73,7 +79,7 @@ export function zoomBy(delta, anchorX=.5, anchorY=.5) {
     scrollTo({left:scrollX+after.left+u*after.width-x,
         top:scrollY+after.top+v*after.height-y,behavior:'instant'});
     pinchAnchor={svg,u,v,x,y,rect:svg.getBoundingClientRect()};
-    highlight();report();return state();
+    return refresh();
 }
 export function search(value, direction=1) {
     const needle=normal(String(value));
@@ -105,17 +111,14 @@ export function search(value, direction=1) {
     }
     if(matches.length) {
         selected=selected<0 ? (direction<0 ? matches.length-1 : 0) : (selected+(direction<0?-1:1)+matches.length)%matches.length;
-        const range=document.createRange(), match=matches[selected];
-        range.setStart(match.start.node,match.start.offset);range.setEnd(match.end.node,match.end.end);
-        const rect=range.getBoundingClientRect();scrollTo({top:Math.max(0,scrollY+rect.top-innerHeight/3),left:scrollX});
+        const rect=matchRange(matches[selected]).getBoundingClientRect();scrollTo({top:Math.max(0,scrollY+rect.top-innerHeight/3),left:scrollX});
     }
-    highlight();report();return state();
+    return refresh();
 }
-export function clearSearch() {query='';matches=[];selected=-1;highlight();report();}
+export function clearSearch() {query='';matches=[];selected=-1;refresh();}
 export function pageData(index) {
     const svg=pages()[index]?.querySelector('svg');if(!svg)throw new Error('invalidPage');
-    const box=svg.viewBox.baseVal;
-    const width=box.width || svg.width.baseVal.value, height=box.height || svg.height.baseVal.value;
+    const {width,height}=svgSize(svg);
     if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0||width>20000||height>20000)throw new Error('invalidDimensions');
     return {source:new XMLSerializer().serializeToString(svg),width,height};
 }

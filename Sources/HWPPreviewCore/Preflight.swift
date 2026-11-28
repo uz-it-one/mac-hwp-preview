@@ -10,15 +10,22 @@ private extension Data {
         guard offset >= 0, length >= 0, offset <= count - length else { throw PreviewFailure.invalid }
         return subdata(in: offset..<(offset + length))
     }
+    var crc: Int {
+        withUnsafeBytes { Int(crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt(count))) }
+    }
 }
 
 /// Read-only container checks before handing any document to the rendering worker.
 public enum Preflight {
+    private static let maxEntryBytes = 40 * 1024 * 1024
+    private static let maxTotalBytes = 100 * 1024 * 1024
     public static func check(_ data: Data, extension ext: String, cancellation: Cancellation = Cancellation()) throws {
         if cancellation.isCancelled { throw PreviewFailure.cancelled }
-        if ext.lowercased() == "hwpx" { try zip(data, cancellation) }
-        else if ext.lowercased() == "hwp" { try cfb(data, cancellation) }
-        else { throw PreviewFailure.unsupported }
+        switch ext.lowercased() {
+        case "hwpx": try zip(data, cancellation)
+        case "hwp": try cfb(data, cancellation)
+        default: throw PreviewFailure.unsupported
+        }
     }
     private static func inflateRaw(_ data: Data, expected: Int) throws -> Data {
         var stream = z_stream()
@@ -60,8 +67,7 @@ public enum Preflight {
                     if tail == data.count { return result }
                     // Some HWP streams retain a gzip CRC32/ISIZE trailer after raw DEFLATE.
                     if data.count - tail == 8 {
-                        let checksum = result.withUnsafeBytes { crc32(0,$0.bindMemory(to:Bytef.self).baseAddress,uInt(result.count)) }
-                        if try data.integer(tail) == checksum, try data.integer(tail + 4) == result.count { return result }
+                        if try data.integer(tail) == result.crc, try data.integer(tail + 4) == result.count { return result }
                     }
                     return nil
                 }
@@ -102,7 +108,7 @@ public enum Preflight {
             guard method == 0 || method == 8 else { throw PreviewFailure.unsupported }
             let compressed = try data.integer(cursor + 20), size = try data.integer(cursor + 24)
             total += size
-            guard size <= 40 * 1024 * 1024, total <= 100 * 1024 * 1024 else { throw PreviewFailure.oversized }
+            guard size <= maxEntryBytes, total <= maxTotalBytes else { throw PreviewFailure.oversized }
             let nameLength = try data.integer(cursor + 28,2), extra = try data.integer(cursor + 30,2), comment = try data.integer(cursor + 32,2)
             let rawName = try data.bytes(cursor + 46,nameLength)
             guard let name = String(data:rawName,encoding:.utf8), !name.isEmpty, !name.hasPrefix("/"),
@@ -132,8 +138,7 @@ public enum Preflight {
             let compressedData = try data.bytes(payloadStart,compressed)
             let contents = try method == 0 ? compressedData : inflateRaw(compressedData,expected:size)
             guard contents.count == size else { throw PreviewFailure.invalid }
-            let checksum = contents.withUnsafeBytes { crc32(0,$0.bindMemory(to:Bytef.self).baseAddress,uInt(contents.count)) }
-            guard try checksum == data.integer(cursor + 16) else { throw PreviewFailure.invalid }
+            guard try contents.crc == data.integer(cursor + 16) else { throw PreviewFailure.invalid }
             if name.lowercased().hasSuffix(".xml") || name.lowercased().hasSuffix(".hpf") {
                 try xml(contents, cancellation: cancellation)
             }
@@ -157,7 +162,7 @@ public enum Preflight {
         guard parsed else { throw PreviewFailure.invalid }
     }
     private static func cfb(_ data: Data, _ cancellation: Cancellation) throws {
-        guard data.count >= 512, data.starts(with:[0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1]) else { throw PreviewFailure.invalid }
+        guard data.count >= 512, data.starts(with:Renderer.cfbSignature) else { throw PreviewFailure.invalid }
         let major = try data.integer(26,2), shift = try data.integer(30,2)
         guard (major == 3 && shift == 9) || (major == 4 && shift == 12),
               try data.integer(28,2) == 0xfffe, try data.integer(32,2) == 6, try data.integer(56) == 4096 else { throw PreviewFailure.invalid }
@@ -202,7 +207,7 @@ public enum Preflight {
             guard try directory.integer(offset + 124) == 0 else { throw PreviewFailure.oversized }
             if type == 2 {
                 declared += lengthLow
-                guard declared <= 100 * 1024 * 1024, lengthLow <= 40 * 1024 * 1024 else { throw PreviewFailure.oversized }
+                guard declared <= maxTotalBytes, lengthLow <= maxEntryBytes else { throw PreviewFailure.oversized }
                 streams.append((name ?? "",start,lengthLow))
             }
             if type == 5 { guard root == nil else { throw PreviewFailure.invalid }; root = (start,lengthLow) }
@@ -236,11 +241,11 @@ public enum Preflight {
             let raw = try readStream(start,length)
             let isRecords = name == "DocInfo" || name.range(of:"^Section[0-9]+$",options:.regularExpression) != nil
             let candidate = flags & 1 != 0 && (isRecords || name.uppercased().hasPrefix("BIN"))
-            let inflated = try candidate ? inflateBounded(raw,limit:min(40 * 1024 * 1024,100 * 1024 * 1024 - expanded),cancellation:cancellation) : nil
+            let inflated = try candidate ? inflateBounded(raw,limit:min(maxEntryBytes,maxTotalBytes - expanded),cancellation:cancellation) : nil
             if isRecords && flags & 1 != 0 && inflated == nil { throw PreviewFailure.invalid }
             let contents = inflated ?? raw
             expanded += contents.count
-            guard expanded <= 100 * 1024 * 1024 else { throw PreviewFailure.oversized }
+            guard expanded <= maxTotalBytes else { throw PreviewFailure.oversized }
             if isRecords { try records(contents) }
         }
     }

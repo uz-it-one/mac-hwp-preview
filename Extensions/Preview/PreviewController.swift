@@ -28,12 +28,13 @@ final class PreviewController: NSViewController, QLPreviewingController {
             webView.bottomAnchor.constraint(equalTo:view.bottomAnchor)
         ])
         renderer.render(url) { result in
+            let logger = Logger(subsystem: "org.hwp-preview", category: "preview")
             switch result {
             case .success:
-                Logger(subsystem: "org.hwp-preview", category: "preview").notice("WASM preview complete")
+                logger.notice("WASM preview complete")
                 handler(nil)
             case .failure(let error):
-                Logger(subsystem: "org.hwp-preview", category: "preview").error("WASM preview failed")
+                logger.error("WASM preview failed")
                 handler(error)
             }
         }

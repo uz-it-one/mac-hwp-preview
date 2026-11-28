@@ -4,6 +4,12 @@ const allowed = new Set(['svg','g','defs','clipPath','mask','path','rect','line'
 const reference = /^#[a-z0-9_.:-]+$/i;
 const raster = /^data:image\/(png|jpeg|gif|webp|bmp|tiff);base64,[a-z0-9+/=\s]+$/i;
 
+// Engine pages carry a viewBox; fall back to explicit dimensions otherwise.
+export function svgSize(svg) {
+    const box = svg.viewBox.baseVal;
+    return {width: box.width || svg.width.baseVal.value, height: box.height || svg.height.baseVal.value};
+}
+
 export function safeSVG(source) {
     const parsed = new DOMParser().parseFromString(source, 'image/svg+xml');
     if (parsed.querySelector('parsererror') || parsed.documentElement.localName !== 'svg' ||

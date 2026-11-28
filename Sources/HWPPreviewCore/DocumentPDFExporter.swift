@@ -183,13 +183,12 @@ extension WKWebView {
   public static func write(_ data: Data, to destination: URL, original: URL) throws {
     let target = destination.standardizedFileURL.resolvingSymlinksInPath()
     let source = original.standardizedFileURL.resolvingSymlinksInPath()
-    let targetID =
-      try? target.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-      as? NSObject
-    let sourceID =
-      try? source.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-      as? NSObject
-    guard target != source, !(targetID != nil && targetID == sourceID),
+    func fileID(_ url: URL) -> NSObject? {
+      try? url.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
+        as? NSObject
+    }
+    let targetID = fileID(target)
+    guard target != source, !(targetID != nil && targetID == fileID(source)),
       target.pathExtension.lowercased() == "pdf"
     else { throw DocumentExportError.originalDestination }
     try data.write(to: destination, options: .atomic)
